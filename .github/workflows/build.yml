@@ -37,7 +37,7 @@ jobs:
         with:
           combine: true
           target: ${{ matrix.config.target }}
-          # sdk: nightly   # uncomment if you need the very latest SDK/bindings
+          sdk: nightly
 
   package:
     name: Package builds
@@ -50,4 +50,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: cata-bot.geode
-          path: ${{ steps.build.outputs.build-output }}
+          path: ${{ steps.build.outputs.build-output }} 
