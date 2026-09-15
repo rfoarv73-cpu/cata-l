@@ -1,0 +1,19 @@
+{
+    "geode": "5.0.0",
+    "gd": {
+        "win": "2.2081",
+        "android": "2.2081",
+        "mac": "2.2081"
+    },
+    "version": "v0.1.0",
+    "id": "wlyffi.showcasebot",
+    "name": "cata!",
+    "developer": "Wlyffi",
+    "description": "Macro record/playback bot for Geometry Dash showcases.",
+    "tags": ["utility", "gameplay"],
+    "resources": {
+        "sprites": [
+            "resources/*.png"
+        ]
+    }
+}
