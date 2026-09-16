@@ -3,6 +3,7 @@
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/modify/PauseLayer.hpp>
 #include <Geode/modify/CCKeyboardDispatcher.hpp>
+#include <Geode/modify/CCScene.hpp>
 #include <imgui-cocos.hpp>
 #include <fstream>
 
@@ -99,8 +100,8 @@ class $modify(PlayLayer) {
         return cp;
     }
     // practice: removing a checkpoint drops its savepoint too
-    void removeLastCheckpoint() {
-        PlayLayer::removeLastCheckpoint();
+    void removeCheckpoint(bool first) {
+        PlayLayer::removeCheckpoint(first);
         if (g_state == BotState::Recording && !g_checkpoints.empty())
             g_checkpoints.pop_back();
     }
@@ -323,10 +324,10 @@ static CCTexture2D* loadTex(const char* name) {
 }
 
 static void loadIcons() {
-    g_icons[0] = loadTex(("main.png"_spr).c_str());
-    g_icons[1] = loadTex(("assist.png"_spr).c_str());
-    g_icons[2] = loadTex(("render.png"_spr).c_str());
-    g_icons[3] = loadTex(("visuals.png"_spr).c_str());
+    g_icons[0] = loadTex("main.png"_spr);
+    g_icons[1] = loadTex("assist.png"_spr);
+    g_icons[2] = loadTex("render.png"_spr);
+    g_icons[3] = loadTex("visuals.png"_spr);
     g_iconsLoaded = true;
 }
 
@@ -446,11 +447,36 @@ static void drawOrb() {
     ImGui::PopStyleVar();
 }
 
-$on_mod(Loaded) {
-    ImGuiCocos::get()
-        .setup([] { applyTheme(); })
-        .draw([] {
+// gd-imgui-cocos renders through a plain cocos node that lives in the running
+// scene (only one may exist at a time, since ImGui uses a single global
+// context). We keep one persistent node and move it into each new scene so the
+// launcher orb / menu stay visible across the whole game.
+static ImGuiNode* g_imgui = nullptr;
+
+static void ensureImGui(CCScene* scene) {
+    if (!scene) return;
+
+    if (!g_imgui) {
+        g_imgui = ImGuiNode::create([] {
             drawOrb();
             if (g_menuOpen) drawMenu();
         });
+        if (!g_imgui) return;
+        g_imgui->retain();   // survive scene changes; context lives with it
+        applyTheme();        // ImGui context was (re)created inside create()
+    }
+
+    if (g_imgui->getParent() != scene) {
+        g_imgui->removeFromParentAndCleanup(false);
+        g_imgui->setZOrder(1000);
+        scene->addChild(g_imgui);
+    }
 }
+
+class $modify(CCScene) {
+    static CCScene* create() {
+        auto scene = CCScene::create();
+        ensureImGui(scene);
+        return scene;
+    }
+};
