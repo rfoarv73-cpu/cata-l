@@ -127,8 +127,12 @@ bool ImGuiNode::init() {
 #endif
 
 	this->setTouchMode(kCCTouchesOneByOne);
-	// this->setTouchPriority(-999);
 	this->setTouchEnabled(true);
+	// intercept touches before GD's own UI (CCMenu sits around -128) so clicks on
+	// the ImGui window are swallowed instead of leaking through to the game.
+	// ccTouchBegan only returns true when io.WantCaptureMouse, so taps outside the
+	// window still pass through to gameplay.
+	this->setTouchPriority(-500);
 
 	this->setKeypadEnabled(true);
 	this->setKeyboardEnabled(true);

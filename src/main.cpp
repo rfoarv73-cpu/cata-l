@@ -6,6 +6,7 @@
 #include <Geode/modify/CCScene.hpp>
 #include <imgui-cocos.hpp>
 #include <fstream>
+#include <cstdio>
 
 using namespace geode::prelude;
 
@@ -59,19 +60,36 @@ static ImVec2 g_orbPos = ImVec2(70.f, 240.f);
 static CCTexture2D* g_icons[4] = { nullptr, nullptr, nullptr, nullptr };
 static bool g_iconsLoaded = false;
 
-static std::filesystem::path macroPath() { return Mod::get()->getSaveDir() / "macro.txt"; }
+// current replay name (typed while recording, chosen from a list while playing)
+static char g_macroName[64] = "untitled";
+
+static std::filesystem::path macroPath(const std::string& name) {
+    return Mod::get()->getSaveDir() / (name + ".txt");
+}
+static std::string currentName() { return g_macroName[0] ? g_macroName : "untitled"; }
+
+// every saved replay in the mod's save dir (file stem, sans .txt)
+static std::vector<std::string> listReplays() {
+    std::vector<std::string> out;
+    std::error_code ec;
+    for (auto& p : std::filesystem::directory_iterator(Mod::get()->getSaveDir(), ec))
+        if (p.path().extension() == ".txt") out.push_back(p.path().stem().string());
+    return out;
+}
 
 static void saveMacro() {
-    std::ofstream out(macroPath(), std::ios::trunc);
+    auto name = currentName();
+    std::ofstream out(macroPath(name), std::ios::trunc);
     for (auto& e : g_macro) out << e.frame << ' ' << e.button << ' ' << e.player1 << ' ' << e.hold << '\n';
-    Notification::create(fmt::format("Saved {} inputs", g_macro.size()), NotificationIcon::Success)->show();
+    Notification::create(fmt::format("Saved {} inputs as '{}'", g_macro.size(), name), NotificationIcon::Success)->show();
 }
 static void loadMacro() {
+    auto name = currentName();
     g_macro.clear();
-    std::ifstream in(macroPath());
+    std::ifstream in(macroPath(name));
     InputEvent e; int p1 = 0, hold = 0;
     while (in >> e.frame >> e.button >> p1 >> hold) { e.player1 = p1 != 0; e.hold = hold != 0; g_macro.push_back(e); }
-    Notification::create(fmt::format("Loaded {} inputs", g_macro.size()), NotificationIcon::Success)->show();
+    Notification::create(fmt::format("Loaded {} inputs from '{}'", g_macro.size(), name), NotificationIcon::Success)->show();
 }
 
 // ===========================================================================
@@ -249,13 +267,28 @@ static void drawMainTab() {
 
     ImGui::AlignTextToFramePadding(); ImGui::TextUnformatted("Name");
     rightAlign(140); ImGui::SetNextItemWidth(140);
-    const char* names[] = { "untitled" }; static int nameIdx = 0;
-    ImGui::Combo("##name", &nameIdx, names, 1);
+    if (g_state == BotState::Playing) {
+        // playback: pick one of the saved replays (dropdown with the arrow)
+        if (ImGui::BeginCombo("##name", g_macroName)) {
+            for (auto& r : listReplays()) {
+                bool sel = (r == g_macroName);
+                if (ImGui::Selectable(r.c_str(), sel)) {
+                    std::snprintf(g_macroName, sizeof(g_macroName), "%s", r.c_str());
+                    loadMacro();
+                }
+                if (sel) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+    } else {
+        // recording / stopped: just type the name you want to save under
+        ImGui::InputText("##name", g_macroName, sizeof(g_macroName));
+    }
 
-    float bw = (ImGui::GetContentRegionAvail().x - 2 * spacing) / 3.f;
     auto sbtn = [&](const char* l, BotState st) {
         bool a = g_state == st; if (a) ImGui::PushStyleColor(ImGuiCol_Button, accent);
-        bool pressed = ImGui::Button(l, ImVec2(bw, 0)); if (a) ImGui::PopStyleColor();
+        float w = ImGui::CalcTextSize(l).x + ImGui::GetStyle().FramePadding.x * 2.f + 10.f;
+        bool pressed = ImGui::Button(l, ImVec2(w, 0)); if (a) ImGui::PopStyleColor();
         return pressed;
     };
     if (sbtn("Stop", BotState::Off))         g_state = BotState::Off;
@@ -269,9 +302,9 @@ static void drawMainTab() {
     rightAlign(90); ImGui::SetNextItemWidth(90); ImGui::InputInt("##tps", &g_tps, 0, 0);
 
     rowToggle("Block live inputs", "##blk", &g_blockLive,    true);
-    rowToggle("Frame Advance",     "##fa",  &g_frameAdvance, false);
-    rowToggle("Intentional death", "##idd", &g_intentDeath,  false);
-    rowToggle("Enable speedhack",  "##sh",  &g_speedhackOn,  false);
+    rowToggle("Frame Advance",     "##fa",  &g_frameAdvance, true);
+    rowToggle("Intentional death", "##idd", &g_intentDeath,  true);
+    rowToggle("Enable speedhack",  "##sh",  &g_speedhackOn,  true);
 
     ImGui::Dummy(ImVec2(0, 4));
     if (ImGui::SmallButton("Save")) saveMacro();
@@ -350,9 +383,9 @@ static void sidebarItem(int i, const char* label) {
 
     ImU32 tint = active ? IM_COL32(150, 190, 255, 255) : IM_COL32(175, 178, 185, 255);
     ImVec2 ic(s.x + (cell - icon) * 0.5f, s.y + 5.f);
-    if (g_icons[i]) // cocos textures are flipped vertically -> flip V in the UVs
+    if (g_icons[i]) // straight UVs; the gd-imgui-cocos renderer already handles the flip
         dl->AddImage((ImTextureID)(intptr_t)g_icons[i]->m_uName,
-                     ic, ImVec2(ic.x + icon, ic.y + icon), ImVec2(0, 1), ImVec2(1, 0), tint);
+                     ic, ImVec2(ic.x + icon, ic.y + icon), ImVec2(0, 0), ImVec2(1, 1), tint);
 
     ImVec2 ts = ImGui::CalcTextSize(label);
     ImU32 txt = active ? IM_COL32(232, 236, 245, 255) : IM_COL32(150, 152, 158, 255);
@@ -459,6 +492,9 @@ static void ensureImGui(CCScene* scene) {
 
     if (!g_imgui) {
         g_imgui = ImGuiNode::create([] {
+            // hide the launcher/menu while actively playing a level; it comes
+            // back on pause and in menus. (open it in-level via the pause button.)
+            if (auto* pl = PlayLayer::get(); pl && !pl->m_isPaused) return;
             drawOrb();
             if (g_menuOpen) drawMenu();
         });
