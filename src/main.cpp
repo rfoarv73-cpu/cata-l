@@ -140,9 +140,10 @@ class $modify(PlayLayer) {
 // on mobile there's no keyboard, so the "cata!" pause-menu button is the entry.
 #if !defined(GEODE_IS_ANDROID) && !defined(GEODE_IS_IOS)
 class $modify(cocos2d::CCKeyboardDispatcher) {
-    bool dispatchKeyboardMSG(cocos2d::enumKeyCodes key, bool down, bool arr) {
+    // desktop (win/mac) bindings pass a trailing double; android/ios excluded above
+    bool dispatchKeyboardMSG(cocos2d::enumKeyCodes key, bool down, bool arr, double idk) {
         if (down && key == cocos2d::KEY_K) { g_menuOpen = !g_menuOpen; return true; }
-        return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, arr);
+        return CCKeyboardDispatcher::dispatchKeyboardMSG(key, down, arr, idk);
     }
 };
 #endif
